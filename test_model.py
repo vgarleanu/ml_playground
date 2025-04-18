@@ -239,6 +239,20 @@ def test_model():
             if field not in metadata:
                 test_passed = False
                 failures.append(f"{field}: missing (expected '{expected_value}')")
+            # For numeric fields like season/episode, compare the numeric value not string format
+            elif field in ['season', 'episode'] and metadata[field] and expected_value:
+                # Convert both to integers for comparison to handle zero-padding differences
+                try:
+                    extracted_num = int(metadata[field])
+                    expected_num = int(expected_value)
+                    if extracted_num != expected_num:
+                        test_passed = False
+                        failures.append(f"{field}: got '{metadata[field]}', expected '{expected_value}'")
+                except (ValueError, TypeError):
+                    # If conversion fails, fall back to string comparison
+                    if str(metadata[field]) != str(expected_value):
+                        test_passed = False
+                        failures.append(f"{field}: got '{metadata[field]}', expected '{expected_value}'")
             elif str(metadata[field]) != str(expected_value):
                 test_passed = False
                 failures.append(f"{field}: got '{metadata[field]}', expected '{expected_value}'")
