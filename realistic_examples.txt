@@ -1,0 +1,47 @@
+# Anime Examples
+[SubsPlease] Mushoku Tensei - 12 (1080p) [A5EC8478].mkv
+[Judas] Sword Art Online Progressive - Scherzo of Deep Night (BD 1080p HEVC Dual Audio) [C07F6D0D].mkv
+[Erai-raws] Blue Lock - 32 [1080p][Multiple Subtitle][0AE5AB46].mkv
+[Ember] Bocchi the Rock! - 01 [F27CD908].mkv
+[MTBB] Chainsaw Man - 01 [F47D8C88].mkv
+[Anime Time] One Piece - Episode 1015 [1080p][D09E5148].mkv
+[Anime Land] Bleach - Thousand Year Blood War S2 - 01 [1080p] [DUB] [B538CD77].mkv
+[HorribleSubs] My Hero Academia S05 - 01 [1080p].mkv
+[SSA] Demon Slayer - Kimetsu no Yaiba - Mugen Train Arc - 01 [1080p][80B5B4E6].mkv
+[Anime Koi] Oshi no Ko - Episode 01 [1080p][7D85C2C9].mkv
+
+# TV Shows Examples
+Game.of.Thrones.S08E06.The.Iron.Throne.1080p.AMZN.WEB-DL.DDP5.1.H.264-GoT.mkv
+Breaking.Bad.S05E14.Ozymandias.1080p.BluRay.5.1.x265-RCVR.mkv
+Stranger.Things.S04E01.Chapter.One.The.Hellfire.Club.NETFLIX.1080p.WEB-DL.DDP5.1.Atmos.H.264-TEPES.mkv
+The.Office.US.S06E04.5.Niagara.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX.mkv
+Better.Call.Saul.S06E13.Saul.Gone.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX.mkv
+Mr.Robot.S04E13.Series.Finale.Part.2.1080p.AMZN.WEB-DL.DDP5.1.H.264-TOMMY.mkv
+The.Last.of.Us.S01E01.When.Youre.Lost.in.the.Darkness.1080p.HBO.WEB-DL.DDP5.1.H.264-NTb.mkv
+Westworld.S04E08.Que.Sera.Sera.1080p.HBO.WEB-DL.DDP5.1.H.264-FLUX.mkv
+House.of.the.Dragon.S01E10.The.Black.Queen.1080p.HBO.WEB-DL.DDP5.1.H.264-FLUX.mkv
+The.Mandalorian.S02E08.Chapter.16.The.Rescue.1080p.DSNP.WEB-DL.DDP5.1.H.264-TOMMY.mkv
+
+# Movies Examples
+Inception.2010.1080p.BluRay.x264-SPARKS.mkv
+The.Shawshank.Redemption.1994.REMASTERED.1080p.BluRay.x264-HDEX.mkv
+Pulp.Fiction.1994.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-EPSiLON.mkv
+The.Dark.Knight.2008.IMAX.1080p.BluRay.x264-EbP.mkv
+Interstellar.2014.1080p.BluRay.x264-YTS.mkv
+Parasite.2019.KOREAN.1080p.BluRay.x264-REGRET.mkv
+Everything.Everywhere.All.at.Once.2022.1080p.WEB-DL.DDP5.1.H.264-CMRG.mkv
+Avengers.Endgame.2019.2160p.UHD.BluRay.X265-IAMABLE.mkv
+Spider-Man.Across.the.Spider-Verse.2023.1080p.WEB-DL.DDP5.1.Atmos.H.264-CMRG.mkv
+The.Godfather.1972.REMASTERED.1080p.BluRay.x264-HDEX.mkv
+
+# More Complex Examples
+[Anime Time] Dragon Ball Z Kai (2009) [Upscaled 1080p] [Complete Pack][F7E5D97B]/[Anime Time] Dragon Ball Z Kai - S01E01 - Prologue to Battle! The Return of Goku [Upscaled 1080p][765B38DD].mkv
+The.Sopranos.Complete.Series.S01-S06.1080p.BluRay.DTS5.1.x264-HOMEFEI/The.Sopranos.S01E01.The.Sopranos.1080p.BluRay.DTS5.1.x264-HOMEFEI.mkv
+Marvel.Cinematic.Universe.Phase.Three.Complete.1080p.BluRay.x264-SPARKS/Black.Panther.2018.1080p.BluRay.x264-SPARKS.mkv
+[ButterflyDreams] Detective Conan Movie Pack (1997-2022) 1-25 [BD 1080p HEVC 10bit]/[ButterflyDreams] Detective Conan Movie 01 - The Time-Bombed Skyscraper [BD 1080p HEVC 10bit][FB4C07AE].mkv
+
+# Hard Examples with Episode Titles
+The.Good.Place.S01E01.Everything.Is.Fine.1080p.NF.WEB-DL.DDP5.1.x264-RCVR.mkv
+Rick.and.Morty.S06E10.Ricktional.Mortpoons.Rickmas.Mortcation.1080p.HMAX.WEB-DL.DDP5.1.H.264-NTb.mkv
+Sherlock.S03E03.His.Last.Vow.1080p.BluRay.x264-SHORTBREHD.mkv
+[SSA] Kimetsu no Yaiba (Demon Slayer) S03E01 - The Hidden Village of Swordsmith Arc Begins [1080p][AAD8D7C4].mkv
