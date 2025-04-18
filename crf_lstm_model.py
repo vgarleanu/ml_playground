@@ -20,8 +20,8 @@ MAX_LEN = 200        # Maximum filename length in characters
 BATCH_SIZE = 64      # Good batch size for stabler gradients
 EPOCHS = 50          # More epochs for the complex model with early stopping
 LEARNING_RATE = 3e-4 # Lower learning rate for more stable training
-EMBEDDING_DIM = 128  # Character embedding dimension
-HIDDEN_DIM = 256     # Hidden dimension for LSTM
+EMBEDDING_DIM = 160  # Increased character embedding dimension
+HIDDEN_DIM = 320     # Increased hidden dimension for LSTM
 NUM_LAYERS = 2       # Two layers of bidirectional LSTM
 DROPOUT = 0.4        # Increased dropout for better generalization
 WEIGHT_O_TAG = 0.05  # Further downweight "O" tags to focus more on entity extraction
@@ -45,23 +45,26 @@ class CharFeatureExtractor:
     
     @staticmethod
     def get_char_type(char):
-        """Return character type features"""
-        if char.isupper():
-            return [1, 0, 0, 0, 0]  # Uppercase
-        elif char.islower():
-            return [0, 1, 0, 0, 0]  # Lowercase
+        """Return character type features ignoring case sensitivity"""
+        if char.isalpha():
+            return [1, 0, 0, 0]  # Letter (regardless of case)
         elif char.isdigit():
-            return [0, 0, 1, 0, 0]  # Digit
+            return [0, 1, 0, 0]  # Digit
         elif char in ".-_[]() ":
-            return [0, 0, 0, 1, 0]  # Common separator
+            return [0, 0, 1, 0]  # Common separator
         else:
-            return [0, 0, 0, 0, 1]  # Other
+            return [0, 0, 0, 1]  # Other
     
     @staticmethod
     def extract_features(filename):
-        """Extract features for each character in the filename"""
+        """Extract features for each character in the filename with enhanced recognition for edge cases"""
         features = []
-        # Create richer feature representation without explicit pattern recognition
+        
+        # Create a sliding window of 4 characters for digit pattern recognition
+        # This helps detect years and other numeric patterns
+        digit_window = [''] * 4
+        
+        # Create richer feature representation with added pattern recognition
         for i, char in enumerate(filename):
             # Character type features
             char_type = CharFeatureExtractor.get_char_type(char)
@@ -72,11 +75,11 @@ class CharFeatureExtractor:
             
             # Context window features - characters before and after
             # This helps the model learn character n-gram patterns
-            context_before = [0, 0, 0, 0, 0]  # One-hot encoding of char type before
+            context_before = [0, 0, 0, 0]  # One-hot encoding of char type before
             if i > 0:
                 context_before = CharFeatureExtractor.get_char_type(filename[i-1])
                 
-            context_after = [0, 0, 0, 0, 0]  # One-hot encoding of char type after
+            context_after = [0, 0, 0, 0]  # One-hot encoding of char type after
             if i < len(filename) - 1:
                 context_after = CharFeatureExtractor.get_char_type(filename[i+1])
             
@@ -86,14 +89,90 @@ class CharFeatureExtractor:
             # Is this character the end of a word boundary?
             is_boundary_end = 1 if (i == len(filename)-1 or filename[i+1] in ".-_[]() ") and char not in ".-_[]() " else 0
             
+            # Update sliding window for digit pattern recognition
+            digit_window.pop(0)
+            digit_window.append(char if char.isdigit() else '')
+            
+            # Year pattern detection feature - is this character part of a potential year pattern?
+            # Check if there are 4 consecutive digits that could be a year (1900-2030)
+            is_potential_year = 0
+            if all(c.isdigit() for c in digit_window) and len(''.join(digit_window)) == 4:
+                year_value = int(''.join(digit_window))
+                if 1900 <= year_value <= 2030:
+                    is_potential_year = 1
+            
+            # Title number pattern detection - is this a digit that's part of a title rather than metadata?
+            is_title_digit = 0
+            if char.isdigit():
+                # Look back to see if there are letters before
+                has_letter_before = False
+                for j in range(max(0, i-5), i):
+                    if filename[j].isalpha():
+                        has_letter_before = True
+                        break
+                
+                # Look ahead to determine what follows
+                title_number_pattern = False
+                
+                # Check if it's part of a pattern like "2012" (title) vs "2012" (year)
+                # or "22 Jump Street" vs "S22E01"
+                if i < len(filename) - 1:
+                    # If digit is followed by another digit, check position
+                    if filename[i+1].isdigit():
+                        # If it's early in the filename or has letters immediately before, 
+                        # it's likely part of a title
+                        if i < len(filename) / 3 or has_letter_before:
+                            title_number_pattern = True
+                    # If digit is followed by a letter, likely part of a title
+                    elif filename[i+1].isalpha():
+                        title_number_pattern = True
+                
+                if title_number_pattern:
+                    is_title_digit = 1
+            
+            # Domain detection feature - is this part of a potential web domain?
+            # Check for patterns like "www." or ".com"
+            is_domain_part = 0
+            domain_patterns = ["www.", ".com", ".org", ".net", ".to", ".io"]
+            for pattern in domain_patterns:
+                start = max(0, i - len(pattern) + 1)
+                end = i + 1
+                if start >= 0 and end <= len(filename):
+                    window = filename[start:end].lower()
+                    if window == pattern:
+                        is_domain_part = 1
+                        break
+            
+            # Directory path detection - check for path separators
+            is_directory_path = 1 if char in "/\\" else 0
+            
+            # Season/Episode marker detection - S01E01 pattern
+            is_season_episode_marker = 0
+            if i < len(filename) - 1:
+                if (char.lower() == 's' and filename[i+1].isdigit()) or \
+                   (i > 0 and char.lower() == 'e' and filename[i-1].isdigit()):
+                    is_season_episode_marker = 1
+            
+            # Acronym detection for titles with dots (S.H.I.E.L.D, M.A.S.H)
+            is_acronym_part = 0
+            if char.isalpha() and i > 0 and i < len(filename) - 1:
+                if filename[i-1] == '.' and (i+1 < len(filename) and filename[i+1] == '.'):
+                    is_acronym_part = 1
+            
             # Combine all features
             char_features = (
-                char_type +                # Character type (5)
-                pos_features +             # Position (1)
-                context_before +           # Previous char type (5)
-                context_after +            # Next char type (5)
-                [is_boundary_start] +      # Word boundary start (1)
-                [is_boundary_end]          # Word boundary end (1)
+                char_type +                    # Character type (4)
+                pos_features +                 # Position (1)
+                context_before +               # Previous char type (4)
+                context_after +                # Next char type (4)
+                [is_boundary_start] +          # Word boundary start (1)
+                [is_boundary_end] +            # Word boundary end (1)
+                [is_potential_year] +          # Potential year pattern (1)
+                [is_title_digit] +             # Digit likely part of title (1)
+                [is_domain_part] +             # Potential web domain part (1)
+                [is_directory_path] +          # Directory path separator (1)
+                [is_season_episode_marker] +   # Season/episode marker (1)
+                [is_acronym_part]              # Part of acronym with periods (1)
             )
             features.append(char_features)
         
@@ -211,18 +290,32 @@ class BiLSTM_CRF(nn.Module):
             nn.ReLU()
         )
         
-        # Convolutional layer for capturing local character n-grams
-        # This helps detect patterns like "S01E02" or "2010"
-        self.conv = nn.Conv1d(
+        # Multiple convolutional layers for capturing n-grams of different lengths
+        # This helps detect patterns like "S01E02", "2010", "Blade Runner 2049", etc.
+        self.conv1 = nn.Conv1d(
             in_channels=embedding_dim * 2,  # Char embeddings + features
-            out_channels=embedding_dim,
+            out_channels=embedding_dim // 2,
             kernel_size=3,
             padding=1
         )
         
+        self.conv2 = nn.Conv1d(
+            in_channels=embedding_dim * 2,  # Char embeddings + features
+            out_channels=embedding_dim // 4,
+            kernel_size=5,
+            padding=2
+        )
+        
+        self.conv3 = nn.Conv1d(
+            in_channels=embedding_dim * 2,  # Char embeddings + features
+            out_channels=embedding_dim // 4,
+            kernel_size=7,
+            padding=3
+        )
+        
         # Main LSTM layers
         self.lstm = nn.LSTM(
-            embedding_dim,  # Output from conv layer
+            embedding_dim,  # Output from combined conv layers
             hidden_dim, 
             num_layers=num_layers,
             bidirectional=True,
@@ -234,18 +327,31 @@ class BiLSTM_CRF(nn.Module):
         # This helps connect related tags across the sequence
         self.attention = nn.MultiheadAttention(
             embed_dim=hidden_dim * 2,  # BiLSTM output dimension
-            num_heads=4,
+            num_heads=8,  # Increased number of attention heads
             dropout=dropout,
             batch_first=True
+        )
+        
+        # Feed-forward network after attention
+        self.ffn = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim * 4),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim * 4, hidden_dim * 2)
         )
         
         # Final projection to tag space with layer normalization
         self.hidden2tag = nn.Sequential(
             nn.LayerNorm(hidden_dim * 2),
-            nn.Linear(hidden_dim * 2, tag_size)
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, tag_size)
         )
         
         self.dropout = nn.Dropout(dropout)
+        self.layer_norm1 = nn.LayerNorm(hidden_dim * 2)
+        self.layer_norm2 = nn.LayerNorm(hidden_dim * 2)
         
         # CRF layer for optimal tag sequence prediction
         self.crf = CRF(tag_size, batch_first=True)
@@ -266,26 +372,52 @@ class BiLSTM_CRF(nn.Module):
         combined_embeds = torch.cat([char_embeds, feature_embeds], dim=-1)
         combined_embeds = self.dropout(combined_embeds)
         
-        # Apply 1D convolution to capture local patterns
+        # Apply multiple convolutional layers with different kernel sizes
+        # to capture n-grams of different lengths
         # Reshape for conv1d which expects [batch, channels, seq_len]
         combined_embeds = combined_embeds.transpose(1, 2)
-        conv_out = F.relu(self.conv(combined_embeds))
-        conv_out = conv_out.transpose(1, 2)  # Back to [batch, seq_len, features]
+        
+        # Apply each convolutional layer
+        conv1_out = F.relu(self.conv1(combined_embeds))
+        conv2_out = F.relu(self.conv2(combined_embeds))
+        conv3_out = F.relu(self.conv3(combined_embeds))
+        
+        # Concatenate the outputs of different conv layers
+        conv_out = torch.cat([conv1_out, conv2_out, conv3_out], dim=1)
+        
+        # Make sure the output dimension matches what the LSTM expects
+        if conv_out.size(1) != self.embedding.embedding_dim:
+            # Use a 1x1 convolution to adjust the channel dimension
+            conv_out = F.adaptive_avg_pool1d(conv_out, self.embedding.embedding_dim)
+        
+        # Back to [batch, seq_len, features]
+        conv_out = conv_out.transpose(1, 2)
         
         # LSTM for sequential modeling
         lstm_out, _ = self.lstm(conv_out)
         
-        # Self-attention for capturing long-range dependencies
+        # Layer normalization before attention (for stable training)
+        norm_lstm_out = self.layer_norm1(lstm_out)
+        
+        # Multi-head self-attention for capturing long-range dependencies
         attention_out, _ = self.attention(
-            lstm_out, lstm_out, lstm_out,
+            norm_lstm_out, norm_lstm_out, norm_lstm_out,
             key_padding_mask=~mask if mask is not None else None
         )
         
-        # Residual connection
-        lstm_out = lstm_out + attention_out
-        lstm_out = self.dropout(lstm_out)
+        # Residual connection and dropout
+        lstm_out = lstm_out + self.dropout(attention_out)
         
-        # Project to tag space
+        # Layer normalization before FFN
+        norm_lstm_out = self.layer_norm2(lstm_out)
+        
+        # Feed-forward network
+        ffn_out = self.ffn(norm_lstm_out)
+        
+        # Residual connection and dropout
+        lstm_out = lstm_out + self.dropout(ffn_out)
+        
+        # Project to tag space with deeper projection network
         emissions = self.hidden2tag(lstm_out)
         
         # If tags are provided, compute loss

@@ -6,11 +6,23 @@ from datetime import datetime, timedelta
 
 # Sample data for filling templates
 titles = [
+    # Standard titles
     "The Shawshank Redemption", "The Godfather", "Pulp Fiction", "The Dark Knight", 
     "Fight Club", "Inception", "Interstellar", "Parasite", "Avengers Endgame", 
     "The Matrix", "Breaking Bad", "Game of Thrones", "Stranger Things", "The Office", 
     "Friends", "The Mandalorian", "Attack on Titan", "Demon Slayer", "My Hero Academia",
-    "Jujutsu Kaisen", "One Piece", "Naruto", "Death Note", "Fullmetal Alchemist"
+    "Jujutsu Kaisen", "One Piece", "Naruto", "Death Note", "Fullmetal Alchemist",
+    
+    # Titles with numbers - edge cases
+    "2001 A Space Odyssey", "21 Jump Street", "22 Jump Street", "300", "1917", "2012", 
+    "District 9", "The Magnificent Seven", "Ocean's Eleven", "10 Cloverfield Lane",
+    "127 Hours", "500 Days of Summer", "8 Mile", "28 Days Later", "9",
+    
+    # Titles with future dates
+    "Blade Runner 2049", "Death Race 2000", "Space 1999", "Marvel 2099",
+    
+    # Titles with dots/periods
+    "S.W.A.T", "Agents of S.H.I.E.L.D", "M.A.S.H", "G.I. Joe", "E.T."
 ]
 
 anime_studios = ["Erai-raws", "HorribleSubs", "SubsPlease", "Judas", "MTBB", "Commie", "Underwater"]
@@ -415,19 +427,22 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
     # Calculate base distribution
     if balance_difficult_cases:
         # Balanced distribution: more tv shows and movies with years
-        movie_pct = 0.4
-        tv_pct = 0.4
+        movie_pct = 0.35
+        tv_pct = 0.35
         anime_pct = 0.2
+        edge_case_pct = 0.1  # Reserve 10% for dedicated edge cases
     else:
         # Default distribution
         movie_pct = 0.33
         tv_pct = 0.33
         anime_pct = 0.34
+        edge_case_pct = 0.0
     
     # Calculate number of each type to generate
     num_movies = int(num_samples * movie_pct)
     num_tv = int(num_samples * tv_pct)
-    num_anime = num_samples - num_movies - num_tv  # Remainder to ensure total = num_samples
+    num_anime = int(num_samples * anime_pct)
+    num_edge_cases = num_samples - num_movies - num_tv - num_anime  # Remainder for edge cases
     
     # Generate movies
     print(f"Generating {num_movies} movie filenames...")
@@ -450,106 +465,355 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
         if filename and filename != "." and len(filename) > 5:
             data.append((filename, labels))
     
-    # Generate additional challenging examples if requested
-    if balance_difficult_cases and len(data) < num_samples * 1.2:  # Add up to 20% more examples
-        num_additional = int(num_samples * 0.2)
-        print(f"Generating {num_additional} additional challenging examples...")
+    # Generate challenging examples from edge cases
+    if num_edge_cases > 0:
+        print(f"Generating {num_edge_cases} targeted edge cases...")
+        edge_cases = []
         
-        for _ in range(num_additional):
-            # Select a challenge type
-            challenge_type = random.choice([
-                "movie_with_year",
-                "tv_with_season_episode",
-                "tv_with_episode_title",
-                "anime_with_episode"
-            ])
+        # 1. Titles with numbers
+        num_with_numbers = num_edge_cases // 4
+        for _ in range(num_with_numbers):
+            # Filter titles that start with numbers or contain numbers
+            number_titles = [t for t in titles if any(c.isdigit() for c in t)]
+            if not number_titles:
+                number_titles = ["2012", "300", "21 Jump Street"]
+                
+            title = random.choice(number_titles)
+            year = random.choice(years)
+            delimiter = random.choice(delimiters)
             
-            if challenge_type == "movie_with_year":
-                # Ensure movie has year in the filename
-                year = random.choice(years)
-                title = random.choice(titles)
-                delimiter = random.choice(delimiters)
-                resolution = random.choice(resolutions)
+            # Format ensuring title's numbers are preserved
+            clean_t = clean_title(title, delimiter)
+            filename = f"{clean_t}.{year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+            
+            labels = {
+                "media_type": "movie",
+                "title": title,
+                "year": year
+            }
+            edge_cases.append((filename, labels))
+        
+        # 2. Web domains in filename
+        num_with_domains = num_edge_cases // 4
+        for _ in range(num_with_domains):
+            title = random.choice(titles)
+            year = random.choice(years)
+            delimiter = random.choice(delimiters)
+            
+            # Generate web domain pattern
+            domains = ["www.UsaBit.com", "www.RARBG.to", "TorrentCounter.to", "YTS.mx"]
+            domain = random.choice(domains)
+            
+            # Format with domain in brackets
+            filename = f"[ {domain} ] - {title.replace(' ', delimiter)} ({year}) {random.choice(resolutions)}.mkv"
+            
+            labels = {
+                "media_type": "movie",
+                "title": title,
+                "year": year
+            }
+            edge_cases.append((filename, labels))
+        
+        # 3. Sequels with numbers
+        num_sequels = num_edge_cases // 4
+        for _ in range(num_sequels):
+            # Choose a title that could have a sequel
+            base_titles = ["Pacific Rim", "Blade", "Star Wars", "Fast and Furious", "Spider Man", "Iron Man", "John Wick"]
+            base_title = random.choice(base_titles)
+            
+            # Add sequel number
+            sequel_number = random.randint(2, 5)
+            sequel_formats = [
+                f"{base_title} {sequel_number}",                      # Simple number
+                f"{base_title}.{sequel_number}",                      # With dot
+                f"{base_title} Chapter {sequel_number}",              # Chapter format
+                f"{base_title} Part {sequel_number}",                 # Part format
+                f"{base_title} {sequel_number}: Subtitle"            # With subtitle
+            ]
+            
+            title = random.choice(sequel_formats)
+            year = random.choice(years)
+            delimiter = random.choice(delimiters)
+            
+            # Format ensuring title structure is preserved
+            clean_t = title.replace(' ', delimiter)
+            filename = f"{clean_t}.{year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+            
+            labels = {
+                "media_type": "movie",
+                "title": title,
+                "year": year
+            }
+            edge_cases.append((filename, labels))
+        
+        # 4. Titles with dots/periods/acronyms
+        num_with_dots = num_edge_cases - len(edge_cases)
+        for _ in range(num_with_dots):
+            # Filter titles that contain dots or letters that look like acronyms
+            acronym_titles = [t for t in titles if '.' in t or any(len(w) == 1 for w in t.split())]
+            if not acronym_titles:
+                acronym_titles = ["S.W.A.T", "Agents of S.H.I.E.L.D", "M.A.S.H", "G.I. Joe"]
                 
-                # Format with year prominently placed
-                filename = f"{title.replace(' ', delimiter)}.{year}.{resolution}.{random.choice(sources)}.{random.choice(codecs)}.mkv"
-                labels = {
-                    "media_type": "movie",
-                    "title": title,
-                    "year": year,
-                    "resolution": resolution
-                }
-                data.append((filename, labels))
+            title = random.choice(acronym_titles)
+            # Sometimes use a TV show format
+            if random.random() < 0.5:
+                # TV show with season/episode
+                season = random.randint(1, 15)
+                episode = random.randint(1, 24)
                 
-            elif challenge_type == "tv_with_season_episode":
-                # Create TV show with clear season/episode markers
-                title = random.choice(titles)
-                season = random.randint(1, 35)
-                episode = random.randint(1, 99)
-                delimiter = random.choice(delimiters)
+                # Format with dots between all parts
+                filename = f"{title.replace(' ', '.')}.S{season:02d}E{episode:02d}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
                 
-                # Choose from various season/episode formats, focusing on edge cases
-                se_formats = [
-                    f"S{season:02d}E{episode:02d}",             # Standard format
-                    f"S{season}E{episode}",                     # No zero padding
-                    f"s{season:02d}e{episode:02d}",             # Lowercase
-                    f"{season}x{episode:02d}",                  # x separator
-                    f"Season {season} Episode {episode}",       # Text format
-                    f"Season{season}Episode{episode}",          # No spaces text format
-                    f"S{season:02d} - E{episode:02d}",          # With dash between S and E
-                    f"s{season}x{episode:02d}v2",               # With version suffix
-                    f"S{season:02d}E{episode:02d}-E{episode+1:02d}" # Multi-episode
-                ]
-                
-                # Select a format, bias toward less common ones
-                se_format = random.choices(
-                    se_formats, 
-                    weights=[1, 2, 2, 3, 3, 3, 3, 3, 3],  # Higher weights for uncommon formats
-                    k=1
-                )[0]
-                
-                filename = f"{title.replace(' ', delimiter)}.{se_format}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
                 labels = {
                     "media_type": "tv",
                     "title": title,
                     "season": season,
                     "episode": episode
                 }
-                data.append((filename, labels))
+            else:
+                # Movie format
+                year = random.choice(years)
                 
-            elif challenge_type == "tv_with_episode_title":
-                # TV show with episode title
-                title = random.choice(titles)
-                season = random.randint(1, 15)
-                episode = random.randint(1, 24)
-                episode_title = random.choice(episode_titles)
-                delimiter = random.choice(delimiters)
+                # Format with dots between all parts
+                filename = f"{title.replace(' ', '.')}.{year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
                 
-                filename = f"{title.replace(' ', delimiter)}.S{season:02d}E{episode:02d}.{episode_title.replace(' ', delimiter)}.{random.choice(resolutions)}.mkv"
                 labels = {
-                    "media_type": "tv",
+                    "media_type": "movie",
                     "title": title,
-                    "season": season,
-                    "episode": episode,
-                    "episode_title": episode_title
+                    "year": year
                 }
-                data.append((filename, labels))
+            
+            edge_cases.append((filename, labels))
+        
+        # Add all edge cases to the dataset
+        data.extend(edge_cases)
+    
+    # Generate additional challenging examples if requested
+    if balance_difficult_cases and len(data) < num_samples * 1.2:  # Add up to 20% more examples
+        num_additional = min(int(num_samples * 0.2), num_samples - len(data))
+        if num_additional > 0:
+            print(f"Generating {num_additional} additional challenging examples...")
+            
+            for _ in range(num_additional):
+                # Select a challenge type
+                challenge_type = random.choice([
+                    "movie_with_year",
+                    "tv_with_season_episode",
+                    "tv_with_episode_title",
+                    "anime_with_episode",
+                    "future_date_in_title",
+                    "case_sensitivity",
+                    "directory_paths",
+                    "movie_year_in_title"
+                ])
                 
-            elif challenge_type == "anime_with_episode":
-                # Anime with episode number
-                title = random.choice(titles)
-                episode = random.randint(1, 24)
-                studio = random.choice(anime_studios)
-                resolution = random.choice(resolutions)
+                if challenge_type == "movie_with_year":
+                    # Ensure movie has year in the filename
+                    year = random.choice(years)
+                    title = random.choice(titles)
+                    delimiter = random.choice(delimiters)
+                    resolution = random.choice(resolutions)
+                    
+                    # Format with year prominently placed
+                    filename = f"{title.replace(' ', delimiter)}.{year}.{resolution}.{random.choice(sources)}.{random.choice(codecs)}.mkv"
+                    labels = {
+                        "media_type": "movie",
+                        "title": title,
+                        "year": year,
+                        "resolution": resolution
+                    }
+                    data.append((filename, labels))
+                    
+                elif challenge_type == "tv_with_season_episode":
+                    # Create TV show with clear season/episode markers
+                    title = random.choice(titles)
+                    season = random.randint(1, 35)
+                    episode = random.randint(1, 99)
+                    delimiter = random.choice(delimiters)
+                    
+                    # Choose from various season/episode formats, focusing on edge cases
+                    se_formats = [
+                        f"S{season:02d}E{episode:02d}",             # Standard format
+                        f"S{season}E{episode}",                     # No zero padding
+                        f"s{season:02d}e{episode:02d}",             # Lowercase
+                        f"{season}x{episode:02d}",                  # x separator
+                        f"Season {season} Episode {episode}",       # Text format
+                        f"Season{season}Episode{episode}",          # No spaces text format
+                        f"S{season:02d} - E{episode:02d}",          # With dash between S and E
+                        f"s{season}x{episode:02d}v2",               # With version suffix
+                        f"S{season:02d}E{episode:02d}-E{episode+1:02d}" # Multi-episode
+                    ]
+                    
+                    # Select a format, bias toward less common ones
+                    se_format = random.choices(
+                        se_formats, 
+                        weights=[1, 2, 2, 3, 3, 3, 3, 3, 3],  # Higher weights for uncommon formats
+                        k=1
+                    )[0]
+                    
+                    filename = f"{title.replace(' ', delimiter)}.{se_format}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+                    labels = {
+                        "media_type": "tv",
+                        "title": title,
+                        "season": season,
+                        "episode": episode
+                    }
+                    data.append((filename, labels))
+                    
+                elif challenge_type == "tv_with_episode_title":
+                    # TV show with episode title
+                    title = random.choice(titles)
+                    season = random.randint(1, 15)
+                    episode = random.randint(1, 24)
+                    episode_title = random.choice(episode_titles)
+                    delimiter = random.choice(delimiters)
+                    
+                    filename = f"{title.replace(' ', delimiter)}.S{season:02d}E{episode:02d}.{episode_title.replace(' ', delimiter)}.{random.choice(resolutions)}.mkv"
+                    labels = {
+                        "media_type": "tv",
+                        "title": title,
+                        "season": season,
+                        "episode": episode,
+                        "episode_title": episode_title
+                    }
+                    data.append((filename, labels))
+                    
+                elif challenge_type == "anime_with_episode":
+                    # Anime with episode number
+                    title = random.choice(titles)
+                    episode = random.randint(1, 24)
+                    studio = random.choice(anime_studios)
+                    resolution = random.choice(resolutions)
+                    
+                    filename = f"[{studio}] {title} - {episode:02d} [{resolution}].mkv"
+                    labels = {
+                        "media_type": "anime",
+                        "title": title,
+                        "episode": episode,
+                        "studio": studio
+                    }
+                    data.append((filename, labels))
                 
-                filename = f"[{studio}] {title} - {episode:02d} [{resolution}].mkv"
-                labels = {
-                    "media_type": "anime",
-                    "title": title,
-                    "episode": episode,
-                    "studio": studio
-                }
-                data.append((filename, labels))
+                elif challenge_type == "future_date_in_title":
+                    # Create movie with a future date in the title
+                    title_with_date = random.choice([
+                        "Blade Runner 2049", "Death Race 2000", "2012", "1984", 
+                        "Space 1999", "2001 A Space Odyssey"
+                    ])
+                    
+                    # Extract the actual year from the title
+                    actual_year = random.choice(years)
+                    delimiter = random.choice(delimiters)
+                    
+                    # Format ensuring the future date is preserved in the title
+                    clean_t = clean_title(title_with_date, delimiter)
+                    filename = f"{clean_t}.{actual_year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+                    
+                    labels = {
+                        "media_type": "movie",
+                        "title": title_with_date,
+                        "year": actual_year
+                    }
+                    data.append((filename, labels))
+                
+                elif challenge_type == "case_sensitivity":
+                    # Create filename with mixed case
+                    title = random.choice(titles)
+                    
+                    if random.random() < 0.5:
+                        # TV show with lowercase season/episode markers
+                        season = random.randint(1, 15)
+                        episode = random.randint(1, 24)
+                        delimiter = random.choice(delimiters)
+                        
+                        # Use lowercase for everything
+                        filename = f"{title.replace(' ', delimiter).lower()}.s{season:02d}e{episode:02d}.{random.choice(resolutions).lower()}.{random.choice(sources).lower()}.mkv"
+                        
+                        labels = {
+                            "media_type": "tv",
+                            "title": title,
+                            "season": season,
+                            "episode": episode
+                        }
+                    else:
+                        # Movie with mixed case
+                        year = random.choice(years)
+                        delimiter = random.choice(delimiters)
+                        
+                        # Lowercase the title
+                        filename = f"{title.replace(' ', delimiter).lower()}.{year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+                        
+                        labels = {
+                            "media_type": "movie",
+                            "title": title,
+                            "year": year
+                        }
+                    
+                    data.append((filename, labels))
+                
+                elif challenge_type == "directory_paths":
+                    # Create filename with directory structure
+                    title = random.choice(titles)
+                    
+                    if random.random() < 0.5:
+                        # TV show with season directory
+                        season = random.randint(1, 10)
+                        episode = random.randint(1, 20)
+                        episode_title = random.choice(episode_titles) if random.random() < 0.5 else ""
+                        
+                        # Create directory path
+                        dir_path = f"{title} Season {season}"
+                        
+                        # Create filename
+                        filename = f"{dir_path}/Episode {episode}{f' - {episode_title}' if episode_title else ''}"
+                        
+                        labels = {
+                            "media_type": "tv",
+                            "title": title,
+                            "season": season,
+                            "episode": episode,
+                            "episode_title": episode_title
+                        }
+                    else:
+                        # Anime with structure
+                        episode = random.randint(1, 24)
+                        
+                        # Create directory path
+                        dir_path = f"{title} [1080p]"
+                        
+                        # Create filename
+                        filename = f"{dir_path}/Episode {episode}"
+                        
+                        labels = {
+                            "media_type": "anime",
+                            "title": title,
+                            "episode": episode
+                        }
+                    
+                    data.append((filename, labels))
+                
+                elif challenge_type == "movie_year_in_title":
+                    # Create movie where the title includes a year that's not the release year
+                    year_titles = ["2012", "1917", "1984", "2001 A Space Odyssey"]
+                    title = random.choice(year_titles)
+                    
+                    # Get a different year for the actual release
+                    release_year = None
+                    while not release_year or str(release_year) in title:
+                        release_year = random.choice(years)
+                    
+                    delimiter = random.choice(delimiters)
+                    
+                    # Format ensuring both the title's year and release year are clear
+                    clean_t = clean_title(title, delimiter)
+                    filename = f"{clean_t}.{release_year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+                    
+                    labels = {
+                        "media_type": "movie",
+                        "title": title,
+                        "year": release_year
+                    }
+                    data.append((filename, labels))
     
     # If we still have too few examples, fill with random types
     while len(data) < num_samples:
