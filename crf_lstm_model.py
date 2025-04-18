@@ -503,17 +503,49 @@ def train_model(model, train_loader, val_loader, num_epochs=EPOCHS):
 def extract_metadata_from_tags(filename: str, tag_sequence: List[str]) -> Dict[str, str]:
     """
     Extract metadata values from a character-level tag sequence
+    Handles per-word tagging for title and aggregates them
     """
     metadata = {}
     
-    # Track current field and value being built
+    # Specialized handling for titles since they're tagged per-word
+    title_parts = []
+    title_part = []
+    in_title = False
+    
+    # First pass: Extract all fields except title
     current_field = None
     current_value = []
     
     # Process each character and its tag
-    for char, tag in zip(filename, tag_sequence):
-        # Beginning of a new field
-        if tag.startswith('B-'):
+    for i, (char, tag) in enumerate(zip(filename, tag_sequence)):
+        # Title handling (special case)
+        if tag == 'B-title':
+            # If we were already in a title part, save the previous part
+            if in_title and title_part:
+                title_parts.append(''.join(title_part))
+                title_part = []
+            
+            # Start a new title part
+            in_title = True
+            title_part = [char]
+            
+            # Skip regular processing for title tags
+            continue
+            
+        elif tag == 'I-title' and in_title:
+            title_part.append(char)
+            # Skip regular processing for title tags
+            continue
+            
+        elif in_title:
+            # We were in a title but now we're not - save the part
+            if title_part:
+                title_parts.append(''.join(title_part))
+                title_part = []
+            in_title = False
+        
+        # Non-title field processing
+        if tag.startswith('B-') and tag != 'B-title':
             # Save previous field if any
             if current_field:
                 metadata[current_field] = ''.join(current_value)
@@ -522,11 +554,11 @@ def extract_metadata_from_tags(filename: str, tag_sequence: List[str]) -> Dict[s
             # Start new field
             current_field = tag[2:]  # Remove 'B-' prefix
             current_value = [char]
-        
+            
         # Inside of current field
-        elif tag.startswith('I-') and current_field and tag[2:] == current_field:
+        elif tag.startswith('I-') and current_field and tag[2:] == current_field and tag != 'I-title':
             current_value.append(char)
-        
+            
         # Outside any field
         elif tag == 'O':
             # Save previous field if any
@@ -535,27 +567,73 @@ def extract_metadata_from_tags(filename: str, tag_sequence: List[str]) -> Dict[s
                 current_field = None
                 current_value = []
     
-    # Save the last field if any
+    # Save the last title part if needed
+    if in_title and title_part:
+        title_parts.append(''.join(title_part))
+    
+    # Save the last non-title field if any
     if current_field:
         metadata[current_field] = ''.join(current_value)
     
-    # Minimal post-processing
+    # Combine all title parts into a single title
+    if title_parts:
+        metadata['title'] = ' '.join(title_parts)
+    
+    # Post-processing and enhancement
     if metadata:
         # Clean up title (replace dots and underscores with spaces)
         if 'title' in metadata:
             metadata['title'] = metadata['title'].replace('.', ' ').replace('_', ' ').strip()
         
-        # Just validate year format (no changing)
+        # Validate year format
         if 'year' in metadata:
             year_value = metadata['year'].strip()
             if not (year_value.isdigit() and len(year_value) == 4):
                 # If it's not a valid year, remove it
                 del metadata['year']
+        
+        # Year detection - if we don't have a year but do have a title, look for year pattern
+        if 'title' in metadata and 'year' not in metadata:
+            # Look for typical year pattern (4 digits between 1900-2030)
+            # First check right after the title
+            if 'title' in metadata:
+                title_pattern = metadata['title'].replace(' ', '.').replace(' ', '_').replace(' ', '-')
+                # Check various boundaries after title (in case of different separators)
+                possible_title_end = [
+                    filename.find(title_pattern) + len(title_pattern),
+                    filename.find(metadata['title']) + len(metadata['title']),
+                    filename.lower().find(metadata['title'].lower()) + len(metadata['title'])
+                ]
+                
+                # Check each possible position after title
+                for title_end in possible_title_end:
+                    if title_end > 0 and title_end < len(filename) - 4:
+                        # Look for year within 3 chars after title
+                        for i in range(title_end, min(title_end + 3, len(filename) - 3)):
+                            year_candidate = filename[i:i+4]
+                            if year_candidate.isdigit() and 1900 <= int(year_candidate) <= 2030:
+                                metadata['year'] = year_candidate
+                                break
+                    if 'year' in metadata:
+                        break
+            
+            # If still no year, scan the entire filename for year pattern
+            if 'year' not in metadata:
+                for i in range(len(filename) - 3):
+                    # Find 4-digit sequences
+                    if (filename[i:i+4].isdigit() and 
+                        1900 <= int(filename[i:i+4]) <= 2030):
+                        
+                        # Additional check: is this likely a year and not part of something else?
+                        # Years are usually preceded by a separator
+                        if i == 0 or filename[i-1] in ".-_[]() ":
+                            metadata['year'] = filename[i:i+4]
+                            break
     
-    # Debug print if metadata is empty
+    # Debug print if metadata is empty or limited
     if len(metadata) == 0:
         print("No metadata extracted!")
-    elif len(metadata) == 1:
+    elif len(metadata) == 1 and not ('title' in metadata and 'year' in metadata):
         print(f"Warning: Limited metadata extracted (1 field)")
     
     return metadata
