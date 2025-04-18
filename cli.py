@@ -51,7 +51,7 @@ def load_crf_model(model_path="crf_model_output/model.pt"):
     
     return model, char_to_idx, idx_to_tag
 
-def process_filename(filename, model, char_to_idx, idx_to_tag, output_format="pretty"):
+def process_filename(filename, model, char_to_idx, idx_to_tag, output_format="pretty", debug=False):
     """Process a single filename and extract metadata"""
     # Extract metadata using the CRF-LSTM model
     metadata, tag_sequence = extract_metadata(model, char_to_idx, idx_to_tag, filename)
@@ -61,6 +61,8 @@ def process_filename(filename, model, char_to_idx, idx_to_tag, output_format="pr
         # Add filename to the output
         result = metadata.copy()
         result["filename"] = filename
+        if debug:
+            result["tags"] = tag_sequence
         return result
     elif output_format == "csv":
         headers = ["filename"] + METADATA_FIELDS
@@ -74,6 +76,22 @@ def process_filename(filename, model, char_to_idx, idx_to_tag, output_format="pr
                 result += f"  {field}: {value}\n"
         else:
             result += "  No metadata extracted\n"
+            
+        # Add character-by-character tags for debugging
+        if debug:
+            result += "\nCharacter-by-character tags:\n"
+            for i, (char, tag) in enumerate(zip(filename, tag_sequence)):
+                if tag != 'O':  # Skip non-entity tags for clarity
+                    result += f"  {i}: '{char}' -> {tag}\n"
+                    
+            # Add visual representation with tags above characters
+            tag_map = {'O': ' ', 'B-title': 'T', 'I-title': 't', 'B-year': 'Y', 'I-year': 'y', 
+                      'B-season': 'S', 'I-season': 's', 'B-episode': 'E', 'I-episode': 'e'}
+            simple_tags = ''.join(tag_map.get(tag, ' ') for tag in tag_sequence)
+            result += "\nTag visualization:\n"
+            result += simple_tags + "\n"
+            result += filename + "\n"
+            
         return result
 
 def main():
@@ -83,6 +101,7 @@ def main():
     parser.add_argument("--output", choices=["json", "csv", "pretty"], default="pretty", 
                         help="Output format (default: pretty)")
     parser.add_argument("--interactive", action="store_true", help="Run in interactive mode, reading from stdin")
+    parser.add_argument("--debug", action="store_true", help="Enable debug output with character-by-character tags")
     parser.add_argument("filenames", nargs="*", help="Filenames to process (not used in interactive mode)")
     args = parser.parse_args()
     
@@ -96,7 +115,7 @@ def main():
             for line in sys.stdin:
                 filename = line.strip()
                 if filename:
-                    result = process_filename(filename, model, char_to_idx, idx_to_tag, args.output)
+                    result = process_filename(filename, model, char_to_idx, idx_to_tag, args.output, args.debug)
                     if args.output == "json":
                         print(json.dumps(result, indent=2))
                     else:
@@ -111,7 +130,7 @@ def main():
         
         results = []
         for filename in args.filenames:
-            result = process_filename(os.path.basename(filename), model, char_to_idx, idx_to_tag, args.output)
+            result = process_filename(os.path.basename(filename), model, char_to_idx, idx_to_tag, args.output, args.debug)
             results.append(result)
         
         # Output results based on format
