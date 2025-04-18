@@ -300,7 +300,7 @@ class BiLSTM_CRF(nn.Module):
 
 def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[Any]]) -> List[List[str]]:
     """
-    Create character-level BIO tags for each filename
+    Create character-level BIO tags for each filename using a simplified approach
     Returns a list of tag sequences, one for each filename
     """
     all_tag_sequences = []
@@ -317,305 +317,51 @@ def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[
             if not value or value.lower() in ('nan', ''):
                 continue
             
-            # Special handling for numeric fields like year
+            # For year - straightforward exact match
             if field == 'year' and value.isdigit() and len(value) == 4:
                 # Look for exact year match
                 year_pos = filename.find(value)
                 if year_pos >= 0:
-                    # Mark beginning and inside positions - mark just the year digits
+                    # Mark beginning and inside positions - just the year digits
                     tag_sequence[year_pos] = f'B-{field}'
                     for i in range(1, len(value)):
                         tag_sequence[year_pos + i] = f'I-{field}'
             
-            # Special handling for season/episode patterns
+            # For season and episode - find the numbers directly
             elif field in ['season', 'episode'] and str(value).replace('.', '', 1).isdigit():
-                num_value = int(float(value))
+                num_value = str(int(float(value)))
+                # Try with both zero-padded (01) and non-padded (1) versions
+                padded_value = num_value.zfill(2)
                 
-                # For seasons, look for natural placements in the filename
-                if field == 'season':
-                    # Try to find S followed by digits (like "S01", "S1", etc.)
-                    for i in range(len(filename) - 1):
-                        if i < len(tag_sequence) and filename[i].lower() == 's' and i+1 < len(filename) and filename[i+1].isdigit():
-                            # Check if this looks like a season marker (not just random 's1' in a word)
-                            is_boundary = (i == 0 or filename[i-1] in ".-_[]() ")
-                            
-                            if is_boundary:
-                                # Extract the full number after S
-                                num_str = ""
-                                j = i + 1
-                                while j < len(filename) and filename[j].isdigit():
-                                    num_str += filename[j]
-                                    j += 1
-                                
-                                # If this number matches our expected season number
-                                if num_str and (int(num_str) == num_value or int(num_str) == num_value * 100):
-                                    # ONLY mark the numbers as the season, not the 'S' prefix
-                                    for k in range(i+1, i+1+len(num_str)):
-                                        if k < len(tag_sequence):
-                                            if k == i+1:  # First digit gets Beginning tag
-                                                tag_sequence[k] = f'B-{field}'
-                                            else:  # Rest get Inside tag
-                                                tag_sequence[k] = f'I-{field}'
-                                    break
-                    
-                    # Also look for "Season" followed by number
-                    season_str = "Season"
-                    for i in range(len(filename) - len(season_str)):
-                        if filename[i:i+len(season_str)].lower() == season_str.lower():
-                            # Find following number
-                            j = i + len(season_str)
-                            while j < len(filename) and filename[j] in " ":
-                                j += 1
-                            
-                            num_str = ""
-                            start_pos = j
-                            while j < len(filename) and filename[j].isdigit():
-                                num_str += filename[j]
-                                j += 1
-                            
-                            # If this number matches our expected season
-                            if num_str and int(num_str) == num_value:
-                                # Only mark the number part, not "Season "
-                                for k in range(start_pos, j):
-                                    if k == start_pos:
-                                        tag_sequence[k] = f'B-{field}'
-                                    else:
-                                        tag_sequence[k] = f'I-{field}'
-                                break
-                
-                # For episodes, similar approach
-                else:  # field == 'episode'
-                    # Look for E followed by digits
-                    for i in range(len(filename) - 1):
-                        if i < len(tag_sequence) and filename[i].lower() == 'e' and i+1 < len(filename) and filename[i+1].isdigit():
-                            # Make sure this is a boundary and not in the middle of a word
-                            # Also check if it follows a season marker
-                            is_episode_marker = False
-                            if i > 0:
-                                # Check if preceded by 's' and digits (common pattern: S01E02)
-                                if filename[i-1].isdigit():
-                                    j = i-1
-                                    while j > 0 and filename[j].isdigit():
-                                        j -= 1
-                                    if j >= 0 and filename[j].lower() == 's':
-                                        is_episode_marker = True
-                                # Or check if it's at a boundary
-                                elif filename[i-1] in ".-_[]() ":
-                                    is_episode_marker = True
-                            
-                            if is_episode_marker:
-                                # Extract full number after E
-                                num_str = ""
-                                j = i + 1
-                                while j < len(filename) and filename[j].isdigit():
-                                    num_str += filename[j]
-                                    j += 1
-                                
-                                # If this number matches our expected episode
-                                if num_str and int(num_str) == num_value:
-                                    # ONLY mark the number as episode, not the 'E'
-                                    for k in range(i+1, i+1+len(num_str)):
-                                        if k < len(tag_sequence):
-                                            if k == i+1:  # First digit gets Beginning tag
-                                                tag_sequence[k] = f'B-{field}'
-                                            else:  # Rest get Inside tag
-                                                tag_sequence[k] = f'I-{field}'
-                                    break
-                    
-                    # Look for episode patterns in anime-style filenames: " - 01" or " - 1 "
-                    # These are common in anime releases like "[Group] Title - 01 [1080p]"
-                    dash_pattern = f" - {num_value}"
-                    dash_pos = filename.find(dash_pattern)
-                    if dash_pos >= 0:
-                        # Mark just the number as the episode
-                        start_pos = dash_pos + 3  # Skip " - "
-                        tag_sequence[start_pos] = f'B-{field}'
-                        # If it's a two-digit number
-                        if num_value >= 10:
-                            tag_sequence[start_pos + 1] = f'I-{field}'
-                    
-                    # Also look for "Episode" followed by number
-                    episode_str = "Episode"
-                    for i in range(len(filename) - len(episode_str)):
-                        if filename[i:i+len(episode_str)].lower() == episode_str.lower():
-                            # Find following number
-                            j = i + len(episode_str)
-                            while j < len(filename) and filename[j] in " ":
-                                j += 1
-                            
-                            num_str = ""
-                            start_pos = j
-                            while j < len(filename) and filename[j].isdigit():
-                                num_str += filename[j]
-                                j += 1
-                            
-                            # If this number matches our expected episode
-                            if num_str and int(num_str) == num_value:
-                                # Only mark the number part, not "Episode "
-                                for k in range(start_pos, j):
-                                    if k == start_pos:
-                                        tag_sequence[k] = f'B-{field}'
-                                    else:
-                                        tag_sequence[k] = f'I-{field}'
-                                break
+                # First try exact match with the number
+                num_pos = filename.find(padded_value)
+                if num_pos >= 0:
+                    # Mark the number as field
+                    tag_sequence[num_pos] = f'B-{field}'
+                    for i in range(1, len(padded_value)):
+                        tag_sequence[num_pos + i] = f'I-{field}'
+                # If padded value not found, try non-padded
+                elif padded_value != num_value:
+                    num_pos = filename.find(num_value)
+                    if num_pos >= 0:
+                        # Mark the number as field
+                        tag_sequence[num_pos] = f'B-{field}'
+                        for i in range(1, len(num_value)):
+                            tag_sequence[num_pos + i] = f'I-{field}'
             
-            # For title fields, need special handling
-            elif field == 'title':
-                # Try different title extraction strategies
+            # For title - tag each word in the title
+            elif field == 'title' and value:
+                # Split title into words
+                words = value.split()
                 
-                # Strategy 1: For TV shows with dots (Breaking.Bad)
-                if '.' in filename and 'S' in filename and 'E' in filename:
-                    # Try to find title before season marker
-                    s_pos = filename.find('S')
-                    if s_pos > 0 and s_pos+1 < len(filename) and filename[s_pos+1:s_pos+2].isdigit():
-                        title_part = filename[:s_pos].replace('.', ' ').strip()
-                        if title_part:
-                            for i, char in enumerate(title_part):
-                                if i == 0:
-                                    tag_sequence[i] = f'B-{field}'
-                                else:
-                                    tag_sequence[i] = f'I-{field}'
-                
-                # Strategy 2: For anime with brackets [Group] Title - 01
-                elif '[' in filename and ']' in filename and ' - ' in filename:
-                    bracket_end = filename.find(']')
-                    dash_pos = filename.find(' - ')
-                    
-                    if bracket_end > 0 and dash_pos > bracket_end:
-                        title_part = filename[bracket_end+1:dash_pos].strip()
-                        start_pos = bracket_end + 1
-                        
-                        while start_pos < dash_pos and filename[start_pos] in ' \t':
-                            start_pos += 1
-                        
-                        if start_pos < dash_pos:
-                            # Mark title
-                            for i in range(dash_pos - start_pos):
-                                if i == 0:
-                                    tag_sequence[start_pos] = f'B-{field}'
-                                else:
-                                    tag_sequence[start_pos + i] = f'I-{field}'
-                
-                # Strategy 3: For movies with year (Title.Year)
-                elif field == 'title' and 'year' in metadata_dict and metadata_dict['year'][idx]:
-                    year_val = str(metadata_dict['year'][idx])
-                    if year_val.isdigit() and len(year_val) == 4:
-                        year_pos = filename.find(year_val)
-                        if year_pos > 0:
-                            # Title is everything before the year
-                            title_part = filename[:year_pos].rstrip('. -_')
-                            if title_part:
-                                for i, char in enumerate(title_part):
-                                    if i == 0:
-                                        tag_sequence[i] = f'B-{field}'
-                                    else:
-                                        tag_sequence[i] = f'I-{field}'
-                
-                # Try exact match as last resort
-                if value and not any(t.startswith(f'B-{field}') for t in tag_sequence):
-                    norm_value = value.lower()
-                    norm_filename = filename.lower()
-                    
-                    if norm_value in norm_filename:
-                        value_pos = norm_filename.find(norm_value)
-                        # Mark beginning position
-                        tag_sequence[value_pos] = f'B-{field}'
-                        # Mark inside positions
-                        for i in range(1, len(norm_value)):
-                            tag_sequence[value_pos + i] = f'I-{field}'
-            
-            # For episode titles, try after the episode number
-            elif field == 'episode_title' and value:
-                # Handle episode titles by looking for them after season/episode markers
-                # without using regex
-                
-                # First identify any season/episode markers in the filename
-                se_positions = []
-                
-                # Look for S followed by digits then E followed by digits (like S01E02)
-                for i in range(len(filename) - 3):
-                    if filename[i].lower() == 's' and i+1 < len(filename) and filename[i+1].isdigit():
-                        # Find the end of the season number
-                        j = i + 1
-                        while j < len(filename) and filename[j].isdigit():
-                            j += 1
-                        
-                        # Check if followed by episode marker
-                        if j < len(filename) and filename[j].lower() == 'e' and j+1 < len(filename) and filename[j+1].isdigit():
-                            # Find the end of the episode number
-                            k = j + 1
-                            while k < len(filename) and filename[k].isdigit():
-                                k += 1
-                            
-                            se_positions.append((i, k))  # Store start and end positions
-                
-                # Also look for patterns like '1x02' (season x episode)
-                for i in range(len(filename) - 3):
-                    if filename[i].isdigit() and i+1 < len(filename) and filename[i+1].lower() == 'x' and i+2 < len(filename) and filename[i+2].isdigit():
-                        # Find the end of the number sequence
-                        j = i + 2
-                        while j < len(filename) and filename[j].isdigit():
-                            j += 1
-                        
-                        se_positions.append((i, j))  # Store start and end positions
-                
-                # Process found positions
-                for start_pos, end_pos in se_positions:
-                    # The episode title often follows after a dot or space
-                    if end_pos < len(filename) - 1:
-                        # Skip separators
-                        pos = end_pos
-                        while pos < len(filename) and filename[pos] in '.-_ ':
-                            pos += 1
-                        
-                        # Look for next separator (like period before resolution)
-                        next_sep_pos = len(filename)
-                        for sep in ['.', ' [', ' (', ' -']:
-                            sep_idx = filename[pos:].find(sep)
-                            if sep_idx != -1:
-                                if pos + sep_idx < next_sep_pos:
-                                    next_sep_pos = pos + sep_idx
-                        
-                        # If we found a separator and there's content between episode marker and next separator
-                        if next_sep_pos < len(filename) and pos < next_sep_pos:
-                            # Mark episode title
-                            for i in range(pos, next_sep_pos):
-                                if i == pos:
-                                    tag_sequence[i] = f'B-{field}'
-                                else:
-                                    tag_sequence[i] = f'I-{field}'
-                            
-                            # If we've identified a title, stop looking
-                            if any(t.startswith(f'B-{field}') for t in tag_sequence):
-                                break
-                
-                # Exact match as fallback
-                if value and not any(t.startswith(f'B-{field}') for t in tag_sequence):
-                    norm_value = value.lower()
-                    norm_filename = filename.lower()
-                    
-                    if norm_value in norm_filename:
-                        value_pos = norm_filename.find(norm_value)
-                        # Mark beginning position
-                        tag_sequence[value_pos] = f'B-{field}'
-                        # Mark inside positions
-                        for i in range(1, len(norm_value)):
-                            tag_sequence[value_pos + i] = f'I-{field}'
-            
-            # For all other string fields, do a flexible search
-            else:
-                # Normalize the value for better matching
-                norm_value = value.lower()
-                norm_filename = filename.lower()
-                
-                # Try to find exact matches
-                if norm_value in norm_filename:
-                    value_pos = norm_filename.find(norm_value)
-                    # Mark beginning position
-                    tag_sequence[value_pos] = f'B-{field}'
-                    # Mark inside positions
-                    for i in range(1, len(norm_value)):
-                        tag_sequence[value_pos + i] = f'I-{field}'
+                # Try to find each word in the filename
+                for word in words:
+                    word_pos = filename.lower().find(word.lower())
+                    if word_pos >= 0:
+                        # Mark the word as title
+                        tag_sequence[word_pos] = f'B-{field}'
+                        for i in range(1, len(word)):
+                            tag_sequence[word_pos + i] = f'I-{field}'
         
         all_tag_sequences.append(tag_sequence)
     

@@ -82,10 +82,10 @@ def generate_movie_filename():
     return filename, labels
 
 def generate_tv_filename():
-    """Generate a synthetic TV show filename"""
+    """Generate a synthetic TV show filename with diverse season/episode patterns"""
     title = random.choice(titles)
-    season = random.randint(1, 15)
-    episode = random.randint(1, 24)
+    season = random.randint(1, 35)  # Wider range of seasons
+    episode = random.randint(1, 99)  # Wider range of episodes
     year = random.choice(years)
     delimiter = random.choice(delimiters)
     resolution = random.choice(resolutions)
@@ -96,13 +96,116 @@ def generate_tv_filename():
     # Clean the title
     clean_t = clean_title(title, delimiter)
     
-    # Episode format
-    ep_format = random.choice([
-        f"S{season:02d}E{episode:02d}",
-        f"S{season:02d}E{episode:02d}{random.choice(['-', 'E'])}{episode+1:02d}",  # Multi-episode
-        f"{season}x{episode:02d}",
-        f"{year}.{random.randint(1,12):02d}.{random.randint(1,28):02d}"  # Date format
-    ])
+    # Choose episode format with much more diversity
+    ep_format_type = random.choices([
+        "standard",    # S01E02
+        "separator",   # 1x02, 1.02
+        "text",        # Season 1 Episode 2
+        "dash",        # - 01
+        "bracket",     # [01]
+        "date",        # 2023.01.01
+        "episode_only" # Episode 01, just E01
+    ], weights=[40, 15, 15, 10, 5, 10, 5], k=1)[0]
+    
+    # Generate the episode format based on the selected type
+    if ep_format_type == "standard":
+        # Standard format: S01E02, s1e2, etc.
+        s_prefix = random.choice(["S", "s"])
+        e_prefix = random.choice(["E", "e"])
+        zero_pad_season = random.choice([True, False])  # Whether to use S01 or S1
+        zero_pad_episode = random.choice([True, True, False])  # Bias toward zero padding
+        
+        if zero_pad_season:
+            s_part = f"{s_prefix}{season:02d}"
+        else:
+            s_part = f"{s_prefix}{season}"
+            
+        if zero_pad_episode:
+            e_part = f"{e_prefix}{episode:02d}"
+        else:
+            e_part = f"{e_prefix}{episode}"
+            
+        ep_format = f"{s_part}{e_part}"
+        
+        # Multi-episode format (10% chance)
+        if random.random() < 0.1:
+            next_ep = episode + 1
+            if zero_pad_episode:
+                ep_format += f"{random.choice(['-', e_prefix])}{next_ep:02d}"
+            else:
+                ep_format += f"{random.choice(['-', e_prefix])}{next_ep}"
+    
+    elif ep_format_type == "separator":
+        # Separator format: 1x02, 1.02, etc.
+        sep = random.choice(["x", ".", "-"])
+        zero_pad_season = random.choice([False, False, True])  # Bias against zero padding for season
+        zero_pad_episode = random.choice([True, True, False])  # Bias toward zero padding for episode
+        
+        if zero_pad_season:
+            s_part = f"{season:02d}"
+        else:
+            s_part = f"{season}"
+            
+        if zero_pad_episode:
+            e_part = f"{episode:02d}"
+        else:
+            e_part = f"{episode}"
+            
+        ep_format = f"{s_part}{sep}{e_part}"
+    
+    elif ep_format_type == "text":
+        # Text format: Season 1 Episode 2, etc.
+        s_text = random.choice(["Season", "Season", "SEASON", "Series"])
+        e_text = random.choice(["Episode", "Episode", "EPISODE", "Ep", "EP"])
+        
+        # Format variations
+        if random.choice([True, False]):
+            # With space: Season 1 Episode 2
+            ep_format = f"{s_text} {season} {e_text} {episode}"
+        else:
+            # Without space: Season1Episode2
+            ep_format = f"{s_text}{season}{e_text}{episode}"
+    
+    elif ep_format_type == "dash":
+        # Dash format used in anime: " - 01"
+        zero_pad = random.choice([True, True, False])  # Bias toward zero padding
+        if zero_pad:
+            ep_format = f" - {episode:02d}"
+        else:
+            ep_format = f" - {episode}"
+    
+    elif ep_format_type == "bracket":
+        # Bracket format: [01], [E01], etc.
+        zero_pad = random.choice([True, True, False])
+        use_e_prefix = random.choice([False, True])
+        
+        if zero_pad:
+            if use_e_prefix:
+                ep_format = f"[E{episode:02d}]"
+            else:
+                ep_format = f"[{episode:02d}]"
+        else:
+            if use_e_prefix:
+                ep_format = f"[E{episode}]"
+            else:
+                ep_format = f"[{episode}]"
+    
+    elif ep_format_type == "date":
+        # Date format: 2023.01.01
+        month = random.randint(1, 12)
+        day = random.randint(1, 28)
+        date_sep = random.choice([".", "-", "_"])
+        
+        ep_format = f"{year}{date_sep}{month:02d}{date_sep}{day:02d}"
+    
+    elif ep_format_type == "episode_only":
+        # Episode only format: Episode 01, E01
+        if random.choice([True, False]):
+            # Text format
+            ep_format = f"Episode {episode:02d}"
+        else:
+            # E-prefix only
+            ep_format = f"E{episode:02d}"
     
     # Episode title (50% chance)
     ep_title = ""
@@ -137,12 +240,24 @@ def generate_tv_filename():
     # Clean up any double delimiters
     filename = re.sub(f"{delimiter}{delimiter}+", delimiter, filename)
     
+    # Extract the actual number values for training
+    # We store just the numeric part without S/E prefixes
+    if ep_format_type in ["standard", "separator", "text", "episode_only"]:
+        season_value = season
+        episode_value = episode
+    elif ep_format_type == "dash" or ep_format_type == "bracket":
+        season_value = ""  # Often no season marker in these formats
+        episode_value = episode
+    elif ep_format_type == "date":
+        season_value = ""
+        episode_value = ""  # No clear episode number for date format
+    
     # Label components for training
     labels = {
         "media_type": "tv",
         "title": title,
-        "season": season if "S" in ep_format or "x" in ep_format else "",
-        "episode": episode if "E" in ep_format or "x" in ep_format else "",
+        "season": season_value if season_value != "" else "",
+        "episode": episode_value if episode_value != "" else "",
         "episode_title": random.choice(episode_titles) if ep_title else "",
         "resolution": resolution,
         "source": source if source in components else "",
@@ -151,29 +266,136 @@ def generate_tv_filename():
     return filename, labels
 
 def generate_anime_filename():
-    """Generate a synthetic anime filename"""
+    """Generate a synthetic anime filename with diverse patterns"""
     title = random.choice(titles)
-    episode = random.randint(1, 24)
-    season = random.choice(["", "S2", "S3"]) if random.random() < 0.3 else ""
+    episode = random.randint(1, 99)  # Wider range of episodes
+    
+    # More diverse season representation
+    season_format = random.choices([
+        "none",     # No season info
+        "number",   # S2, Season 2
+        "ordinal",  # Second Season
+        "sequel",   # Title II, Title 2nd Season
+    ], weights=[50, 30, 10, 10], k=1)[0]
+    
+    if season_format == "none":
+        season = ""
+        season_value = ""
+    elif season_format == "number":
+        season_num = random.randint(2, 5)  # Season numbers 2-5
+        season_prefix = random.choice(["S", "Season "])
+        season = f"{season_prefix}{season_num}"
+        season_value = season_num
+    elif season_format == "ordinal":
+        season_num = random.randint(2, 5)
+        ordinals = ["Second", "Third", "Fourth", "Fifth"]
+        season = f"{ordinals[season_num-2]} Season"
+        season_value = season_num
+    else:  # sequel
+        season_num = random.randint(2, 4)
+        sequel_format = random.choice([
+            f"{title} II", 
+            f"{title} {season_num}nd Season",
+            f"{title} Part {season_num}"
+        ])
+        # For sequel formats, the season is part of the title
+        title = sequel_format
+        season = ""
+        season_value = season_num
+    
     resolution = random.choice(resolutions)
     studio = random.choice(anime_studios)
     
-    # Format variations
-    formats = [
-        f"[{studio}] {title}{' ' + season if season else ''} - {episode:02d} [{resolution}].mkv",
-        f"[{studio}] {title.replace(' ', '.')}{('.' + season) if season else ''}.-.{episode:02d}.({resolution}).mkv",
-        f"[{studio}] {title} - {episode:02d} [{resolution}][{random.choice(['HEVC', '10bit', 'Multiple Subtitle'])}].mkv",
-        f"[{studio}] {title}{' ' + season if season else ''} - {episode:02d} [BD][{resolution}][{random.choice(['HEVC', 'DualAudio', 'Uncensored'])}].mkv"
-    ]
+    # More diverse episode number formats
+    ep_format_type = random.choices([
+        "standard",    # - 01
+        "bracket",     # [01]
+        "abbrev",      # EP01, Ep.01
+        "text",        # Episode 01
+        "hashtag",     # #01
+    ], weights=[60, 15, 10, 10, 5], k=1)[0]
     
-    filename = random.choice(formats)
+    if ep_format_type == "standard":
+        # Standard anime format: " - 01"
+        zero_pad = random.choice([True, True, False])  # Bias toward zero padding
+        if zero_pad:
+            ep_part = f" - {episode:02d}"
+        else:
+            ep_part = f" - {episode}"
+    
+    elif ep_format_type == "bracket":
+        # Bracket format: [01], [EP01]
+        zero_pad = random.choice([True, True, False])
+        use_prefix = random.choice([False, True])
+        
+        if zero_pad:
+            if use_prefix:
+                ep_part = f" [EP{episode:02d}]"
+            else:
+                ep_part = f" [{episode:02d}]"
+        else:
+            if use_prefix:
+                ep_part = f" [EP{episode}]"
+            else:
+                ep_part = f" [{episode}]"
+    
+    elif ep_format_type == "abbrev":
+        # Abbreviated: EP01, Ep.01
+        prefix = random.choice(["EP", "Ep.", "ep", "Episode"])
+        ep_part = f" {prefix}{episode:02d}"
+        
+    elif ep_format_type == "text":
+        # Text format: Episode 01
+        ep_part = f" Episode {episode:02d}"
+        
+    else:  # hashtag
+        # Hashtag format sometimes used: #01
+        ep_part = f" #{episode:02d}"
+    
+    # Formatting variations
+    format_type = random.choices([
+        "standard",    # [Studio] Title - 01 [Resolution]
+        "dotted",      # [Studio].Title.-.01.(Resolution)
+        "detailed",    # [Studio] Title - 01 [Resolution][Format][Extra]
+        "named",       # [Studio] Title - 01 - Episode Name [Resolution]
+        "minimal",     # Title - 01
+    ], weights=[40, 20, 20, 15, 5], k=1)[0]
+    
+    # Episode title (only for "named" format or randomly for others)
+    ep_title = ""
+    if format_type == "named" or (random.random() < 0.2 and format_type != "dotted"):
+        ep_title = random.choice(episode_titles)
+    
+    if format_type == "standard":
+        filename = f"[{studio}] {title}{' ' + season if season else ''}{ep_part} [{resolution}].mkv"
+    
+    elif format_type == "dotted":
+        dot_title = title.replace(' ', '.')
+        dot_season = season.replace(' ', '.') if season else ""
+        filename = f"[{studio}].{dot_title}{('.' + dot_season) if dot_season else ''}{ep_part.replace(' ', '.')}.({resolution}).mkv"
+    
+    elif format_type == "detailed":
+        extras = [
+            random.choice(['HEVC', 'H264', 'H.265', '10bit']), 
+            random.choice(['AAC', 'FLAC', 'DualAudio']), 
+            random.choice(['Multi-Sub', 'Uncensored', 'BD', 'WEB-DL'])
+        ]
+        extra_tags = ''.join([f"[{e}]" for e in extras if random.random() < 0.7])
+        filename = f"[{studio}] {title}{' ' + season if season else ''}{ep_part} [{resolution}]{extra_tags}.mkv"
+    
+    elif format_type == "named":
+        filename = f"[{studio}] {title}{' ' + season if season else ''}{ep_part}{f' - {ep_title}' if ep_title else ''} [{resolution}].mkv"
+    
+    else:  # minimal
+        filename = f"{title}{ep_part}.mkv"
     
     # Label components for training
     labels = {
         "media_type": "anime",
         "title": title,
-        "season": season,
+        "season": season_value,
         "episode": episode,
+        "episode_title": ep_title,
         "resolution": resolution,
         "studio": studio,
     }
@@ -262,17 +484,29 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
             elif challenge_type == "tv_with_season_episode":
                 # Create TV show with clear season/episode markers
                 title = random.choice(titles)
-                season = random.randint(1, 15)
-                episode = random.randint(1, 24)
+                season = random.randint(1, 35)
+                episode = random.randint(1, 99)
                 delimiter = random.choice(delimiters)
                 
-                # Choose from various season/episode formats
-                se_format = random.choice([
-                    f"S{season:02d}E{episode:02d}",
-                    f"S{season:02d}E{episode}",
-                    f"s{season:02d}e{episode:02d}",
-                    f"{season}x{episode:02d}"
-                ])
+                # Choose from various season/episode formats, focusing on edge cases
+                se_formats = [
+                    f"S{season:02d}E{episode:02d}",             # Standard format
+                    f"S{season}E{episode}",                     # No zero padding
+                    f"s{season:02d}e{episode:02d}",             # Lowercase
+                    f"{season}x{episode:02d}",                  # x separator
+                    f"Season {season} Episode {episode}",       # Text format
+                    f"Season{season}Episode{episode}",          # No spaces text format
+                    f"S{season:02d} - E{episode:02d}",          # With dash between S and E
+                    f"s{season}x{episode:02d}v2",               # With version suffix
+                    f"S{season:02d}E{episode:02d}-E{episode+1:02d}" # Multi-episode
+                ]
+                
+                # Select a format, bias toward less common ones
+                se_format = random.choices(
+                    se_formats, 
+                    weights=[1, 2, 2, 3, 3, 3, 3, 3, 3],  # Higher weights for uncommon formats
+                    k=1
+                )[0]
                 
                 filename = f"{title.replace(' ', delimiter)}.{se_format}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
                 labels = {
