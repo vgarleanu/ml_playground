@@ -37,8 +37,8 @@ else:
     DEVICE = torch.device("cpu")
     print("Using CPU device")
 
-# Metadata fields we want to extract
-METADATA_FIELDS = ["title", "year", "season", "episode", "episode_title"]
+# Metadata fields we want to extract - simplified scope
+METADATA_FIELDS = ["title", "year", "season", "episode"]
 
 class CharFeatureExtractor:
     """Extracts additional features for each character in a filename"""
@@ -322,7 +322,7 @@ def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[
                 # Look for exact year match
                 year_pos = filename.find(value)
                 if year_pos >= 0:
-                    # Mark beginning and inside positions
+                    # Mark beginning and inside positions - mark just the year digits
                     tag_sequence[year_pos] = f'B-{field}'
                     for i in range(1, len(value)):
                         tag_sequence[year_pos + i] = f'I-{field}'
@@ -331,13 +331,9 @@ def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[
             elif field in ['season', 'episode'] and str(value).replace('.', '', 1).isdigit():
                 num_value = int(float(value))
                 
-                # Train the model to recognize various season/episode patterns
-                # Rather than using regex pattern matching, we'll provide explicit character sequences
-                # that represent beginning of season/episode markers
-                
                 # For seasons, look for natural placements in the filename
                 if field == 'season':
-                    # Try to find S followed by digits
+                    # Try to find S followed by digits (like "S01", "S1", etc.)
                     for i in range(len(filename) - 1):
                         if i < len(tag_sequence) and filename[i].lower() == 's' and i+1 < len(filename) and filename[i+1].isdigit():
                             # Check if this looks like a season marker (not just random 's1' in a word)
@@ -353,12 +349,13 @@ def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[
                                 
                                 # If this number matches our expected season number
                                 if num_str and (int(num_str) == num_value or int(num_str) == num_value * 100):
-                                    # Mark S as beginning
-                                    tag_sequence[i] = f'B-{field}'
-                                    # Mark numbers as inside
+                                    # ONLY mark the numbers as the season, not the 'S' prefix
                                     for k in range(i+1, i+1+len(num_str)):
                                         if k < len(tag_sequence):
-                                            tag_sequence[k] = f'I-{field}'
+                                            if k == i+1:  # First digit gets Beginning tag
+                                                tag_sequence[k] = f'B-{field}'
+                                            else:  # Rest get Inside tag
+                                                tag_sequence[k] = f'I-{field}'
                                     break
                     
                     # Also look for "Season" followed by number
@@ -371,15 +368,16 @@ def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[
                                 j += 1
                             
                             num_str = ""
+                            start_pos = j
                             while j < len(filename) and filename[j].isdigit():
                                 num_str += filename[j]
                                 j += 1
                             
                             # If this number matches our expected season
                             if num_str and int(num_str) == num_value:
-                                # Mark entire "Season X" as the field
-                                for k in range(i, j):
-                                    if k == i:
+                                # Only mark the number part, not "Season "
+                                for k in range(start_pos, j):
+                                    if k == start_pos:
                                         tag_sequence[k] = f'B-{field}'
                                     else:
                                         tag_sequence[k] = f'I-{field}'
@@ -415,12 +413,13 @@ def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[
                                 
                                 # If this number matches our expected episode
                                 if num_str and int(num_str) == num_value:
-                                    # Mark E as beginning
-                                    tag_sequence[i] = f'B-{field}'
-                                    # Mark numbers as inside
+                                    # ONLY mark the number as episode, not the 'E'
                                     for k in range(i+1, i+1+len(num_str)):
                                         if k < len(tag_sequence):
-                                            tag_sequence[k] = f'I-{field}'
+                                            if k == i+1:  # First digit gets Beginning tag
+                                                tag_sequence[k] = f'B-{field}'
+                                            else:  # Rest get Inside tag
+                                                tag_sequence[k] = f'I-{field}'
                                     break
                     
                     # Look for episode patterns in anime-style filenames: " - 01" or " - 1 "
@@ -445,15 +444,16 @@ def create_character_labels(filenames: List[str], metadata_dict: Dict[str, List[
                                 j += 1
                             
                             num_str = ""
+                            start_pos = j
                             while j < len(filename) and filename[j].isdigit():
                                 num_str += filename[j]
                                 j += 1
                             
                             # If this number matches our expected episode
                             if num_str and int(num_str) == num_value:
-                                # Mark entire "Episode X" as the field
-                                for k in range(i, j):
-                                    if k == i:
+                                # Only mark the number part, not "Episode "
+                                for k in range(start_pos, j):
+                                    if k == start_pos:
                                         tag_sequence[k] = f'B-{field}'
                                     else:
                                         tag_sequence[k] = f'I-{field}'
@@ -793,40 +793,24 @@ def extract_metadata_from_tags(filename: str, tag_sequence: List[str]) -> Dict[s
     if current_field:
         metadata[current_field] = ''.join(current_value)
     
-    # Post-process extracted fields
+    # Minimal post-processing
     if metadata:
-        # Clean up title (often contains separators)
+        # Clean up title (replace dots and underscores with spaces)
         if 'title' in metadata:
             metadata['title'] = metadata['title'].replace('.', ' ').replace('_', ' ').strip()
         
-        # Clean up episode title
-        if 'episode_title' in metadata:
-            metadata['episode_title'] = metadata['episode_title'].replace('.', ' ').replace('_', ' ').strip()
-        
-        # Format season consistently (S01, S1, etc.)
-        if 'season' in metadata:
-            season_value = metadata['season'].strip()
-            # If it's just a number
-            if season_value.isdigit():
-                metadata['season'] = f"S{int(season_value)}"
-            # If it starts with S or s
-            elif season_value.lower().startswith('s') and season_value[1:].isdigit():
-                metadata['season'] = f"S{int(season_value[1:])}"
-        
-        # Format episode consistently (E01, E1, etc.)
-        if 'episode' in metadata:
-            episode_value = metadata['episode'].strip()
-            # If it's just a number
-            if episode_value.isdigit():
-                metadata['episode'] = f"E{int(episode_value)}"
-            # If it starts with E or e
-            elif episode_value.lower().startswith('e') and episode_value[1:].isdigit():
-                metadata['episode'] = f"E{int(episode_value[1:])}"
+        # Just validate year format (no changing)
+        if 'year' in metadata:
+            year_value = metadata['year'].strip()
+            if not (year_value.isdigit() and len(year_value) == 4):
+                # If it's not a valid year, remove it
+                del metadata['year']
     
-    # Debug print if metadata is empty or incomplete - simplified version
-    if len(metadata) < 2:
-        # Just print a short warning
-        print(f"Warning: Limited metadata extracted ({len(metadata)} fields)")
+    # Debug print if metadata is empty
+    if len(metadata) == 0:
+        print("No metadata extracted!")
+    elif len(metadata) == 1:
+        print(f"Warning: Limited metadata extracted (1 field)")
     
     return metadata
 
@@ -1166,16 +1150,15 @@ def main():
                 "filename": "[SubsPlease] Mushoku Tensei - 12 (1080p) [A5EC8478].mkv",
                 "expected": {
                     "title": "Mushoku Tensei",
-                    "episode": "E12"
+                    "episode": "12"
                 }
             },
             {
                 "filename": "Breaking.Bad.S05E14.Ozymandias.1080p.BluRay.x264-GROUP.mkv",
                 "expected": {
                     "title": "Breaking Bad",
-                    "season": "S5",
-                    "episode": "E14",
-                    "episode_title": "Ozymandias"
+                    "season": "05",
+                    "episode": "14"
                 }
             },
             {
