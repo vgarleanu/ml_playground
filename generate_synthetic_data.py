@@ -53,7 +53,7 @@ def generate_movie_filename():
     group = random.choice(release_groups)
     
     # Clean the title
-    clean_t = clean_title(title, delimiter)
+    clean_t = title.replace(' ', delimiter)
     
     # Basic components
     components = [clean_t, str(year), resolution, source, codec]
@@ -106,7 +106,7 @@ def generate_tv_filename():
     group = random.choice(release_groups)
     
     # Clean the title
-    clean_t = clean_title(title, delimiter)
+    clean_t = title.replace(' ', delimiter)
     
     # Choose episode format with much more diversity
     ep_format_type = random.choices([
@@ -222,7 +222,7 @@ def generate_tv_filename():
     # Episode title (50% chance)
     ep_title = ""
     if random.random() < 0.5:
-        ep_title = clean_title(random.choice(episode_titles), delimiter)
+        ep_title = random.choice(episode_titles).replace(' ', delimiter)
     
     # Basic components
     components = [clean_t, ep_format]
@@ -483,7 +483,7 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
             delimiter = random.choice(delimiters)
             
             # Format ensuring title's numbers are preserved
-            clean_t = clean_title(title, delimiter)
+            clean_t = title.replace(' ', delimiter)
             filename = f"{clean_t}.{year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
             
             labels = {
@@ -595,8 +595,8 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
             print(f"Generating {num_additional} additional challenging examples...")
             
             for _ in range(num_additional):
-                # Select a challenge type
-                challenge_type = random.choice([
+                # Select a challenge type with extra emphasis on our failing test cases
+                challenge_type = random.choices([
                     "movie_with_year",
                     "tv_with_season_episode",
                     "tv_with_episode_title",
@@ -604,8 +604,16 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
                     "future_date_in_title",
                     "case_sensitivity",
                     "directory_paths",
-                    "movie_year_in_title"
-                ])
+                    "movie_year_in_title",
+                    "title_with_quality",      # NEW: Handle quality terms that could be confused with title (HDRip, PPV)
+                    "title_with_hyphen",       # NEW: Preserve hyphens in titles (X-Men)
+                    "title_with_subtitles",    # NEW: Handle subtitles after separators (Pacific Rim Uprising)
+                    "title_with_apostrophe",   # NEW: Handle apostrophes (Marvel's)
+                    "year_then_season",        # NEW: Handle "The Flash 2014 S01E04" pattern
+                    "spaces_in_se_pattern",    # NEW: Handle "S01 E01" pattern with spaces
+                    "acronym_title"            # NEW: Handle acronyms with periods (S.H.I.E.L.D)
+                ], weights=[5, 5, 5, 5, 5, 5, 5, 5, 
+                            10, 10, 10, 10, 10, 10, 10], k=1)[0]  # Higher weights for new case types
                 
                 if challenge_type == "movie_with_year":
                     # Ensure movie has year in the filename
@@ -706,7 +714,7 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
                     delimiter = random.choice(delimiters)
                     
                     # Format ensuring the future date is preserved in the title
-                    clean_t = clean_title(title_with_date, delimiter)
+                    clean_t = title_with_date.replace(' ', delimiter)
                     filename = f"{clean_t}.{actual_year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
                     
                     labels = {
@@ -794,18 +802,20 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
                 
                 elif challenge_type == "movie_year_in_title":
                     # Create movie where the title includes a year that's not the release year
-                    year_titles = ["2012", "1917", "1984", "2001 A Space Odyssey"]
-                    title = random.choice(year_titles)
+                    # We'll generate synthetic year titles instead of hardcoding
+                    year_value = random.randint(1800, 2099)
+                    title = str(year_value)
                     
                     # Get a different year for the actual release
                     release_year = None
-                    while not release_year or str(release_year) in title:
+                    while not release_year or release_year == year_value:
                         release_year = random.choice(years)
                     
                     delimiter = random.choice(delimiters)
                     
                     # Format ensuring both the title's year and release year are clear
-                    clean_t = clean_title(title, delimiter)
+                    # Use string replace instead of clean_title function
+                    clean_t = title.replace(' ', delimiter)
                     filename = f"{clean_t}.{release_year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
                     
                     labels = {
@@ -813,6 +823,291 @@ def generate_dataset(num_samples=100, balance_difficult_cases=True):
                         "title": title,
                         "year": release_year
                     }
+                    data.append((filename, labels))
+                
+                elif challenge_type == "title_with_quality":
+                    # Create titles that have quality terms that should be excluded
+                    title = random.choice(titles)
+                    
+                    # List of quality terms that might get confused with title
+                    quality_terms = ["HDRip", "HC HDRip", "HDTV", "PPV HDTV", "BRRip", "WEB-DL", 
+                                     "CamRip", "BluRay", "Dual-Audio"]
+                    
+                    # Randomly select where to place the quality term
+                    if random.random() < 0.7:
+                        # Place quality term after title but before year or season
+                        year = random.choice(years)
+                        quality = random.choice(quality_terms)
+                        delimiter = random.choice(delimiters)
+                        
+                        filename = f"{title.replace(' ', delimiter)}.{quality}.{year}.{random.choice(resolutions)}.mkv"
+                        
+                        labels = {
+                            "media_type": "movie",
+                            "title": title,
+                            "year": year
+                        }
+                    else:
+                        # Include quality term in TV show format
+                        season = random.randint(1, 10)
+                        episode = random.randint(1, 20)
+                        quality = random.choice(quality_terms)
+                        delimiter = random.choice(delimiters)
+                        
+                        filename = f"{title.replace(' ', delimiter)}.S{season:02d}E{episode:02d}.{quality}.{random.choice(resolutions)}.mkv"
+                        
+                        labels = {
+                            "media_type": "tv",
+                            "title": title,
+                            "season": season,
+                            "episode": episode
+                        }
+                    
+                    data.append((filename, labels))
+                
+                elif challenge_type == "title_with_hyphen":
+                    # Create titles with hyphens that should be preserved
+                    
+                    # Generate hyphenated title if not already in the list
+                    hyphen_titles = [t for t in titles if "-" in t]
+                    if not hyphen_titles:
+                        # Create hyphenated title
+                        hyphen_title = f"{random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ')}-{random.choice(['Men', 'Force', 'Team', 'Squad', 'Wars'])}"
+                    else:
+                        hyphen_title = random.choice(hyphen_titles)
+                    
+                    # Format with either movie or TV show pattern
+                    if random.random() < 0.5:
+                        # Movie format
+                        year = random.choice(years)
+                        filename = f"{hyphen_title.replace(' ', '.')}.{year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+                        
+                        labels = {
+                            "media_type": "movie",
+                            "title": hyphen_title,
+                            "year": year
+                        }
+                    else:
+                        # TV format
+                        season = random.randint(1, 10)
+                        episode = random.randint(1, 20)
+                        filename = f"{hyphen_title.replace(' ', '.')}.S{season:02d}E{episode:02d}.{random.choice(resolutions)}.mkv"
+                        
+                        labels = {
+                            "media_type": "tv",
+                            "title": hyphen_title,
+                            "season": season,
+                            "episode": episode
+                        }
+                    
+                    data.append((filename, labels))
+                
+                elif challenge_type == "title_with_subtitles":
+                    # Create titles with subtitles that should be included in title
+                    
+                    # Generate a title with subtitle
+                    title_parts = random.choice(titles).split()
+                    if len(title_parts) > 1:
+                        main_title = " ".join(title_parts[:len(title_parts)//2])
+                        subtitle = " ".join(title_parts[len(title_parts)//2:])
+                    else:
+                        main_title = random.choice(titles)
+                        subtitle = random.choice(["Returns", "Reloaded", "Resurrection", "The Beginning", "Forever"])
+                    
+                    # Format with connector between main title and subtitle
+                    connectors = [" ", " - ", ": "]
+                    connector = random.choice(connectors)
+                    full_title = f"{main_title}{connector}{subtitle}"
+                    
+                    # Format as movie or show
+                    if random.random() < 0.6:
+                        # Movie format
+                        year = random.choice(years)
+                        delimiter = random.choice(delimiters)
+                        
+                        filename = f"{full_title.replace(' ', delimiter).replace('-', delimiter).replace(':', delimiter)}.{year}.{random.choice(resolutions)}.mkv"
+                        
+                        labels = {
+                            "media_type": "movie",
+                            "title": full_title,
+                            "year": year
+                        }
+                    else:
+                        # TV format
+                        season = random.randint(1, 10)
+                        episode = random.randint(1, 20)
+                        delimiter = random.choice(delimiters)
+                        
+                        filename = f"{full_title.replace(' ', delimiter).replace('-', delimiter).replace(':', delimiter)}.S{season:02d}E{episode:02d}.{random.choice(resolutions)}.mkv"
+                        
+                        labels = {
+                            "media_type": "tv",
+                            "title": full_title,
+                            "season": season,
+                            "episode": episode
+                        }
+                    
+                    data.append((filename, labels))
+                
+                elif challenge_type == "title_with_apostrophe":
+                    # Create titles with apostrophes
+                    
+                    # Generate a title with apostrophe if not in list
+                    apostrophe_titles = [t for t in titles if "'" in t]
+                    if not apostrophe_titles:
+                        owner = random.choice(["King", "Queen", "Hero", "Warrior", "Dragon", "Knight", "Player", "Captain"])
+                        possession = random.choice(["Legacy", "Journey", "Quest", "Secret", "Revenge", "Fate", "Tale", "Story"])
+                        apostrophe_title = f"{owner}'s {possession}"
+                    else:
+                        apostrophe_title = random.choice(apostrophe_titles)
+                    
+                    # Format as movie or TV show
+                    if random.random() < 0.5:
+                        # Movie format
+                        year = random.choice(years)
+                        # Either preserve apostrophe or escape it
+                        if random.random() < 0.5:
+                            formatted_title = apostrophe_title.replace(' ', '.').replace("'", "\\'")
+                        else:
+                            formatted_title = apostrophe_title.replace(' ', '.').replace("'", "")
+                        
+                        filename = f"{formatted_title}.{year}.{random.choice(resolutions)}.{random.choice(codecs)}.mkv"
+                        
+                        labels = {
+                            "media_type": "movie",
+                            "title": apostrophe_title,
+                            "year": year
+                        }
+                    else:
+                        # TV format
+                        season = random.randint(1, 10)
+                        episode = random.randint(1, 20)
+                        # Either preserve apostrophe or escape it
+                        if random.random() < 0.5:
+                            formatted_title = apostrophe_title.replace(' ', '.').replace("'", "\\'")
+                        else:
+                            formatted_title = apostrophe_title.replace(' ', '.').replace("'", "")
+                            
+                        filename = f"{formatted_title}.S{season:02d}E{episode:02d}.{random.choice(resolutions)}.mkv"
+                        
+                        labels = {
+                            "media_type": "tv",
+                            "title": apostrophe_title,
+                            "season": season,
+                            "episode": episode
+                        }
+                    
+                    data.append((filename, labels))
+                
+                elif challenge_type == "year_then_season":
+                    # Create "The Flash 2014 S01E04" pattern where year is between title and S/E
+                    title = random.choice(titles)
+                    year = random.choice(years)
+                    season = random.randint(1, 10)
+                    episode = random.randint(1, 24)
+                    
+                    # Format with the year between title and S/E
+                    delimiter = random.choice(delimiters)
+                    clean_title = title.replace(' ', delimiter)
+                    
+                    # Various season/episode formats
+                    se_formats = [
+                        f"S{season:02d}E{episode:02d}",
+                        f"s{season:02d}e{episode:02d}",
+                        f"S{season}E{episode:02d}",
+                        f"{season}x{episode:02d}"
+                    ]
+                    se_format = random.choice(se_formats)
+                    
+                    filename = f"{clean_title}.{year}.{se_format}.{random.choice(sources)}.{random.choice(codecs)}.mkv"
+                    
+                    labels = {
+                        "media_type": "tv",
+                        "title": title,
+                        "year": year,
+                        "season": season,
+                        "episode": episode
+                    }
+                    data.append((filename, labels))
+                
+                elif challenge_type == "spaces_in_se_pattern":
+                    # Create "S03 E01" pattern with spaces between S and E
+                    title = random.choice(titles)
+                    season = random.randint(1, 12)
+                    episode = random.randint(1, 24)
+                    
+                    # Format with space between S and E parts
+                    delimiter = random.choice(delimiters)
+                    clean_title = title.replace(' ', delimiter)
+                    
+                    # Various format options with spaces
+                    se_formats = [
+                        f"S{season:02d} E{episode:02d}",
+                        f"S{season} E{episode}",
+                        f"Season {season} Episode {episode}",
+                        f"S{season:02d} - E{episode:02d}"
+                    ]
+                    se_format = random.choice(se_formats)
+                    
+                    filename = f"{clean_title} - {se_format} ({random.choice(resolutions)} - {random.choice(sources)}).mkv"
+                    
+                    labels = {
+                        "media_type": "tv",
+                        "title": title,
+                        "season": season,
+                        "episode": episode
+                    }
+                    data.append((filename, labels))
+                
+                elif challenge_type == "acronym_title":
+                    # Create titles with acronyms that have periods (S.H.I.E.L.D)
+                    
+                    # Generate an acronym title if not in list
+                    acronym_titles = [t for t in titles if "." in t and any(c.isupper() for c in t)]
+                    if not acronym_titles:
+                        # Generate random acronym of 3-5 letters
+                        letters = random.sample("ABCDEFGHIJKLMNOPQRSTUVWXYZ", random.randint(3, 5))
+                        acronym = ".".join(letters)
+                        
+                        # Sometimes add a normal word after the acronym
+                        if random.random() < 0.5:
+                            suffix = random.choice(["Team", "Force", "Unit", "Squad", "Agency", "Division"])
+                            acronym_title = f"{acronym} {suffix}"
+                        else:
+                            acronym_title = acronym
+                    else:
+                        acronym_title = random.choice(acronym_titles)
+                    
+                    # Format as movie or TV show
+                    if random.random() < 0.5:
+                        # Movie format
+                        year = random.choice(years)
+                        # Replace spaces with delimiters but preserve the periods
+                        formatted_title = acronym_title.replace(' ', '.')
+                        
+                        filename = f"{formatted_title}.{year}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+                        
+                        labels = {
+                            "media_type": "movie",
+                            "title": acronym_title,
+                            "year": year
+                        }
+                    else:
+                        # TV format
+                        season = random.randint(1, 10)
+                        episode = random.randint(1, 20)
+                        # Replace spaces with delimiters but preserve the periods
+                        formatted_title = acronym_title.replace(' ', '.')
+                        
+                        filename = f"{formatted_title}.S{season:02d}E{episode:02d}.{random.choice(resolutions)}.{random.choice(sources)}.mkv"
+                        
+                        labels = {
+                            "media_type": "tv",
+                            "title": acronym_title,
+                            "season": season,
+                            "episode": episode
+                        }
+                    
                     data.append((filename, labels))
     
     # If we still have too few examples, fill with random types
@@ -853,7 +1148,88 @@ def write_to_csv(data, filename="synthetic_media_data.csv"):
     
     print(f"Dataset written to {filename}")
 
+def generate_generic_titles(count=100):
+    """Generate generic titles that don't rely on real media names, focusing on structure"""
+    generic_titles = []
+    
+    # Components for building synthetic titles
+    adjectives = ["Dark", "Bright", "Lost", "Hidden", "Secret", "Ancient", "Mystic", "Eternal", "Silent", "Wild", 
+                  "Frozen", "Burning", "Fallen", "Rising", "Deadly", "Epic", "Golden", "Silver", "Broken", "Perfect",
+                  "Last", "First", "New", "Old", "Blue", "Red", "Green", "Black", "White", "Final"]
+    
+    nouns = ["City", "World", "Dream", "Storm", "Light", "Heart", "Legend", "Quest", "Journey", "Shadow",
+             "Empire", "Kingdom", "Tower", "Castle", "Mountain", "Valley", "River", "Ocean", "Star", "Planet",
+             "Sky", "Earth", "Mind", "Soul", "Sword", "Shield", "Knight", "Warrior", "Hero", "Enemy"]
+    
+    actions = ["Rising", "Falling", "Running", "Fighting", "Jumping", "Flying", "Escaping", "Hunting", 
+               "Searching", "Finding", "Breaking", "Building", "Creating", "Destroying", "Saving"]
+    
+    # Generate different title structures
+    for _ in range(count):
+        structure = random.randint(1, 6)
+        
+        if structure == 1:
+            # Simple: The Adjective Noun
+            title = f"The {random.choice(adjectives)} {random.choice(nouns)}"
+        elif structure == 2:
+            # Location: Noun of the Adjective Noun
+            title = f"{random.choice(nouns)} of the {random.choice(adjectives)} {random.choice(nouns)}"
+        elif structure == 3:
+            # Action: The Adjective Action
+            title = f"The {random.choice(adjectives)} {random.choice(actions)}"
+        elif structure == 4:
+            # Numbers in title
+            type_of_number = random.randint(1, 3)
+            if type_of_number == 1:
+                # Just a year-like number
+                title = str(random.randint(1800, 2099))
+            elif type_of_number == 2:
+                # Number + Noun
+                title = f"{random.randint(1, 999)} {random.choice(nouns)}"
+            else:
+                # Title with sequel number
+                title = f"{random.choice(adjectives)} {random.choice(nouns)} {random.randint(2, 9)}"
+        elif structure == 5:
+            # Acronym with periods
+            letters = random.sample("ABCDEFGHIJKLMNOPQRSTUVWXYZ", random.randint(2, 5))
+            title = ".".join(letters)
+        else:
+            # Hyphenated or apostrophe title
+            if random.random() < 0.5:
+                # With hyphen
+                title = f"{random.choice(adjectives)}-{random.choice(nouns)}"
+            else:
+                # With apostrophe
+                title = f"{random.choice(nouns)}'s {random.choice(adjectives)} {random.choice(nouns)}"
+        
+        generic_titles.append(title)
+    
+    # Ensure we have specific pattern examples for our edge cases
+    # Add titles with subtitles
+    for _ in range(count // 10):
+        main_title = random.choice(generic_titles)
+        subtitle_options = [
+            f"{main_title} - {random.choice(adjectives)} {random.choice(nouns)}",
+            f"{main_title}: {random.choice(actions)} of the {random.choice(nouns)}",
+            f"{main_title} {random.choice(adjectives)} {random.choice(nouns)}"
+        ]
+        generic_titles.append(random.choice(subtitle_options))
+    
+    # Add hyphenated titles similar to X-Men
+    for _ in range(count // 10):
+        hyphen_title = f"{random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ')}-{random.choice(nouns)}"
+        generic_titles.append(hyphen_title)
+    
+    return list(set(generic_titles))  # Remove any duplicates
+
 if __name__ == "__main__":
+    # Generate synthetic titles first
+    print("Generating synthetic titles...")
+    synthetic_titles = generate_generic_titles(500)
+    
+    # Replace the predefined title list with our synthetic ones
+    titles = synthetic_titles
+    
     # Generate 5000 synthetic examples with balanced difficult cases
     print("Generating synthetic media filename dataset...")
     dataset = generate_dataset(5000, balance_difficult_cases=True)
